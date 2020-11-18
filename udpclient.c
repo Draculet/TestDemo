@@ -29,24 +29,14 @@ int main(int argc, char *argv[])
 	socklen_t clilen;
 
 	struct epoll_event ev = {0}, events[20];
-	connfd = socket(AF_INET, SOCK_STREAM, 0);
+	connfd = socket(AF_INET, SOCK_DGRAM, 0);
 	epfd = epoll_create(512);
-	struct sockaddr_in serveraddr = {0};
-	serveraddr.sin_family = AF_INET;
-	serveraddr.sin_addr.s_addr = inet_addr(argv[1]);
-	serveraddr.sin_port = htons(atoi(argv[2]));
-
 	
 	//setnonblocking(listenfd);
 
 	ev.data.fd = connfd;
 	ev.events = EPOLLIN;
 	
-	int res = connect(connfd, (struct sockaddr*)&serveraddr, sizeof(serveraddr));
-	if (res == -1) {
-		printf("连接失败\n");
-		exit(-1);
-	}
 	epoll_ctl(epfd, EPOLL_CTL_ADD, connfd, &ev);
 	printf("连接成功\n");
 	//设置计时器
@@ -92,7 +82,12 @@ int main(int argc, char *argv[])
 				uint64_t count;
     			size_t n = read(timerfd, &count, sizeof(count));
 				timerfd_settime(timerfd, 0, &et, &et2);
-				write(connfd, buf, atoi(argv[5]));
+				struct sockaddr_in dst = {0};
+				dst.sin_family = AF_INET;
+				dst.sin_addr.s_addr = inet_addr(argv[1]);
+				dst.sin_port = htons(atoi(argv[2]));
+				socklen_t len = sizeof(dst);
+				sendto(connfd, buf, atoi(argv[5]), 0, (struct sockaddr *)&dst, len);
 			}
 			else if (events[i].data.fd == endfd){
 				printf("计时结束，共持续%s秒\n", argv[3]);
