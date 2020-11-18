@@ -69,18 +69,18 @@ int main(int argc, char *argv[])
 	listen(listenfd, LISTENQ);
 
 	for(; ;) {
-		nfds = epoll_wait(epfd, events, 20, 500);
+		nfds = epoll_wait(epfd, events, 20, -1);
 
 		for(i = 0; i < nfds; ++i) {
 			if(events[i].data.fd == listenfd) {
 				struct sockaddr_in clientaddr = {0};
+				clilen = sizeof(clientaddr);
 				connfd = accept(listenfd, (struct sockaddr *)&clientaddr, &clilen);
 				if(connfd < 0) {
 					perror("connfd < 0");
-					exit(1);
+					exit(-1);
 				}
 				setnonblocking(connfd);
-
 				printf("connect from %s: %d, connfd: %d\n", inet_ntoa(clientaddr.sin_addr), clientaddr.sin_port, connfd);
 
 				ev.data.fd = connfd;

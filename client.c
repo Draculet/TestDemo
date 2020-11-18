@@ -15,35 +15,6 @@
 
 #define MAXLINE		1024*1024 //buf size
 
-struct timeval now(){
-	struct timeval tval;
-    gettimeofday(&tval, NULL);
-	return tval;
-}
-
-int64_t getUsFromEpoch(struct timeval *tval)
-{
-    return tval->tv_sec * 1000000 + tval->tv_usec;
-}
-
-void setnonblocking(int sock)
-{
-	int opts;
-	opts = fcntl(sock, F_GETFL);
-
-	if(opts < 0) {
-		perror("fcntl(sock, GETFL)");
-		exit(1);
-	}
-
-	opts = opts | O_NONBLOCK;
-
-	if(fcntl(sock, F_SETFL, opts) < 0) {
-		perror("fcntl(sock, SETFL, opts)");
-		exit(1);
-	}
-}
-
 int main(int argc, char *argv[])
 {
 	if (argc != 6)
@@ -73,11 +44,11 @@ int main(int argc, char *argv[])
 	
 	int res = connect(connfd, (struct sockaddr*)&serveraddr, sizeof(serveraddr));
 	if (res == -1) {
-		printf("connect failed\n");
+		printf("连接失败\n");
 		exit(-1);
 	}
 	epoll_ctl(epfd, EPOLL_CTL_ADD, connfd, &ev);
-	printf("connect success\n");
+	printf("连接成功\n");
 	//设置计时器
 	int timerfd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
 	int endfd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
@@ -87,15 +58,15 @@ int main(int argc, char *argv[])
 	struct itimerspec et2;
 	memset(&lt, 0, sizeof(lt));
 	memset(&et, 0, sizeof(et));
-	int64_t lastsec = atol(argv[3]);
-	int64_t eachsec = atol(argv[4]);
+	double lastsec = atof(argv[3]);
+	double eachsec = atof(argv[4]);
 	struct timespec l;
-	l.tv_sec = lastsec;
-	l.tv_nsec = 0;
+	l.tv_sec = (long)(lastsec * 1000000) / 1000000;
+	l.tv_nsec = (long)(lastsec * 1000000000) % 1000000000;
 	lt.it_value = l;
 	struct timespec e;
-	e.tv_sec = eachsec;
-	e.tv_nsec = 0;
+	e.tv_sec = (long)(eachsec * 1000000) / 1000000;;
+	e.tv_nsec = (long)(eachsec * 1000000000) % 1000000000;;
 	et.it_value = e;
 	//设置 epoll监听
 	struct epoll_event timeev = {0}, lastev = {0};
@@ -104,7 +75,7 @@ int main(int argc, char *argv[])
 	lastev.data.fd = endfd;
 	lastev.events = EPOLLIN;
 
-	printf("Enter Any Key to Continue\n");
+	printf("键入任意内容开始计时\n");
 	getchar();
 	printf("计时开始\n");
 	//计时开始
@@ -117,7 +88,7 @@ int main(int argc, char *argv[])
 		nfds = epoll_wait(epfd, events, 20, -1);
 		for(i = 0; i < nfds; ++i) {
 			if(events[i].data.fd == timerfd) {
-				printf("%ld 秒时间到\n", et.it_value.tv_sec);
+				printf("%s秒时间到\n", argv[4]);
 				uint64_t count;
     			size_t n = read(timerfd, &count, sizeof(count));
 				timerfd_settime(timerfd, 0, &et, &et2);
