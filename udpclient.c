@@ -12,8 +12,15 @@
 #include <sys/timerfd.h>
 #include <sys/time.h>
 #include <time.h>
+#include <stdbool.h>
 
 #define MAXLINE		1024*1024 //buf size
+
+int64_t  nowUsFromEpoch(){
+	struct timeval tval;
+    gettimeofday(&tval, NULL);
+	return tval.tv_sec * 1000000 + tval.tv_usec;
+}
 
 int main(int argc, char *argv[])
 {
@@ -74,6 +81,9 @@ int main(int argc, char *argv[])
 	//加入监听
 	epoll_ctl(epfd, EPOLL_CTL_ADD, timerfd, &timeev);
 	epoll_ctl(epfd, EPOLL_CTL_ADD, endfd, &lastev);
+
+	bool stopped = false;
+	int64_t endTime = 0;
 	for(; ;) {
 		nfds = epoll_wait(epfd, events, 20, -1);
 		for(i = 0; i < nfds; ++i) {
@@ -81,21 +91,35 @@ int main(int argc, char *argv[])
 				printf("%s秒时间到\n", argv[4]);
 				uint64_t count;
     			size_t n = read(timerfd, &count, sizeof(count));
-				timerfd_settime(timerfd, 0, &et, &et2);
-				struct sockaddr_in dst = {0};
-				dst.sin_family = AF_INET;
-				dst.sin_addr.s_addr = inet_addr(argv[1]);
-				dst.sin_port = htons(atoi(argv[2]));
-				socklen_t len = sizeof(dst);
-				sendto(connfd, buf, atoi(argv[5]), 0, (struct sockaddr *)&dst, len);
+				if (!stopped){
+					timerfd_settime(timerfd, 0, &et, &et2);
+					struct sockaddr_in dst = {0};
+					dst.sin_family = AF_INET;
+					dst.sin_addr.s_addr = inet_addr(argv[1]);
+					dst.sin_port = htons(atoi(argv[2]));
+					socklen_t len = sizeof(dst);
+					sendto(connfd, buf, atoi(argv[5]), 0, (struct sockaddr *)&dst, len);
+				} else {
+					int64_t now = nowUsFromEpoch();
+					if (now - endTime < 10000){ // 在计时误差内仍发送
+						struct sockaddr_in dst = {0};
+						dst.sin_family = AF_INET;
+						dst.sin_addr.s_addr = inet_addr(argv[1]);
+						dst.sin_port = htons(atoi(argv[2]));
+						socklen_t len = sizeof(dst);
+						sendto(connfd, buf, atoi(argv[5]), 0, (struct sockaddr *)&dst, len);
+					}
+					epoll_ctl(epfd, EPOLL_CTL_DEL,timerfd, &ev);
+				}
 			}
 			else if (events[i].data.fd == endfd){
 				printf("计时结束，共持续%s秒\n", argv[3]);
 				struct epoll_event ev;
 				uint64_t count;
     			size_t n = read(endfd, &count, sizeof(count));
-				epoll_ctl(epfd, EPOLL_CTL_DEL,timerfd, &ev);
 				epoll_ctl(epfd, EPOLL_CTL_DEL, endfd, &ev);
+				stopped = true;
+				endTime = nowUsFromEpoch();
 			}
 			else if(events[i].events & EPOLLIN) {
 				printf("fd %d readable\n", events[i].data.fd);
